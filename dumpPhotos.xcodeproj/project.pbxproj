@@ -10,6 +10,17 @@
 		6FE29B141D01799C0094973D /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FE29B131D01799C0094973D /* main.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXBuildRule section */
+		6F011DDA1D0353E300C624F7 /* PBXBuildRule */ = {
+			isa = PBXBuildRule;
+			compilerSpec = com.apple.compilers.proxy.script;
+			fileType = pattern.proxy;
+			isEditable = 1;
+			outputFiles = (
+			);
+		};
+/* End PBXBuildRule section */
+
 /* Begin PBXCopyFilesBuildPhase section */
 		6FE29B0E1D01799C0094973D /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -74,6 +85,7 @@
 				6FE29B0E1D01799C0094973D /* CopyFiles */,
 			);
 			buildRules = (
+				6F011DDA1D0353E300C624F7 /* PBXBuildRule */,
 			);
 			dependencies = (
 			);
@@ -241,6 +253,7 @@
 				6FE29B191D01799C0094973D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};

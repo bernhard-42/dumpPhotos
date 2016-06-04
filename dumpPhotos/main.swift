@@ -59,7 +59,8 @@ class MediaObject {
 	func dict() -> [String: AnyObject] {
 		var result:[String: AnyObject] = [:]
 		for (key, value) in self.attributes {
-			let stringKeys:[String] = ["URL", "contentType", "originalURL", "resolutionString", "modificationDate", "keywordNamesAsString", "name", "Name", "Comment"]
+			let urlKeys = ["URL", "originalURL"]
+			let stringKeys:[String] = ["contentType", "resolutionString", "modificationDate", "keywordNamesAsString", "name", "Name", "Comment"]
 			let rawKeys:[String] = ["longitude", "latitude", "modelId", "fileSize", "Hidden", "mediaType"]
 			if (key == "ILMediaObjectKeywordsAttribute") {
 				result["keywords"] = value as! [String]
@@ -73,8 +74,11 @@ class MediaObject {
 					faceNames.append(a["name"] as! String)
 				}
 				result["faces"] = faceNames
-				// result["faces"] = value as! [String]
 			} else if (stringKeys.contains(key) ) {
+				result[key] = "\(value)"
+			} else if (urlKeys.contains(key) ) {
+				// let decodedUrl: String = "\(value)"
+				// result[key] = decodedUrl.stringByRemovingPercentEncoding!
 				result[key] = "\(value)"
 			} else if (rawKeys.contains(key) ) {
 				result[key] = value
@@ -201,15 +205,16 @@ class PhotosDump:NSObject {
 			groups.addGroup(g)
 			groupList[album.identifier] = g
 			// print(album.name, album.identifier, album.typeIdentifier)
-			if (album.identifier == "allPhotosAlbum" || album.typeIdentifier == "com.apple.Photos.Album") {
+			if (album.typeIdentifier == "com.apple.Photos.Folder") {
+				traverseFolders(album, groups:g)
+			} else {
+		        //if (album.identifier == "allPhotosAlbum" || album.typeIdentifier == "com.apple.Photos.Album") {
 				// print("-", album.name)
 				let context = album.identifier
 				albumCount += 1
 				mediaObjects[context] = album
 				mediaObjects[context]?.addObserver(self, forKeyPath: "mediaObjects", options: NSKeyValueObservingOptions.New, context: retained(context))
 				mediaObjects[context]?.mediaObjects
-			} else if (album.typeIdentifier == "com.apple.Photos.Folder") {
-				traverseFolders(album, groups:g)
 			}
 		}
 	}
