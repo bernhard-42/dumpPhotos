@@ -44,8 +44,6 @@ func JSONStringify(value: AnyObject, prettyPrinted:Bool = false) -> String {
 // Result Classes
 //
 
-var allAttributes = [String: Int]()
-
 class MediaObject {
 	var identifier: String!
 	var name: String!
@@ -53,18 +51,14 @@ class MediaObject {
 	var contentType: String!
 	var attributes: [String : AnyObject]
 	
-	init(identifier: String, name: String = "", url: String = "", contentType: String = "", attributes: [String : AnyObject]) {
+	init(identifier: String, attributes: [String : AnyObject]) {
 		self.identifier = identifier
-		self.name = name
-		self.url = url
-		self.contentType = contentType
 		self.attributes = attributes
 	}
 	
 	func dict() -> [String: AnyObject] {
 		var result:[String: AnyObject] = [:]
 		for (key, value) in self.attributes {
-			allAttributes[key] = 0
 			let stringKeys:[String] = ["URL", "contentType", "originalURL", "resolutionString", "modificationDate", "keywordNamesAsString", "name", "Name", "Comment"]
 			let rawKeys:[String] = ["longitude", "latitude", "modelId", "fileSize", "Hidden", "mediaType"]
 			if (key == "ILMediaObjectKeywordsAttribute") {
@@ -88,9 +82,6 @@ class MediaObject {
 				result["interval"] = value
 			}
 		}
-//		if (name != "") { result["name"] = name as AnyObject }
-//		if (url != "") { result["url"] = url as AnyObject }
-//		if (contentType != "") { result["contentType"] = contentType as AnyObject }
 		
 		return result
 	}
@@ -226,6 +217,7 @@ class PhotosDump:NSObject {
 	func loadRootGroup(){
 		if let rootGroup = photos.rootMediaGroup {
 			print("Root Group: \(rootGroup.identifier):\(rootGroup.typeIdentifier)")
+			print("Starting folder scan")
 			if let albums = photos.mediaGroupForIdentifier("TopLevelAlbums") {
 				traverseFolders(albums, groups: groups)
 			}
@@ -240,23 +232,21 @@ class PhotosDump:NSObject {
 			var count = 0
 			for (mediaObject) in mediaObjects {
 				if (context == "allPhotosAlbum") {
-					let url = mediaObject.URL!
-					let name = mediaObject.name ?? ""
-					let contentType = mediaObject.contentType ?? ""
 					let attributes = mediaObject.attributes
-					m = MediaObject(identifier: mediaObject.identifier, name: name, url: url.absoluteString, attributes: attributes)
+					m = MediaObject(identifier: mediaObject.identifier, attributes: attributes)
 					group!.addMediaObject(mediaObject.identifier, mediaObject: m)
 				} else {
 					group!.addMediaReference(mediaObject.identifier)
 				}
-				
 				count += 1
 			}
-			// print("==>", self.mediaObjects[context]?.name, count)
+			print("- Album \"\(self.mediaObjects[context]!.name!)\": \(count) media objects")
 		}
 		albumCount -= 1
 		if (albumCount == 0) {
+			print("Converting to JSON")
 			let result = JSONStringify(groups.dict(), prettyPrinted: true)
+			print("Writing result")
 			let fileManager = NSFileManager.defaultManager()
 			let path = fileManager.currentDirectoryPath + "/PhotosLibrary.json"
 			do {
@@ -265,7 +255,6 @@ class PhotosDump:NSObject {
 			} catch {
 				print("ERROR writing result")
 			}
-			print(allAttributes.keys)
 			CFRunLoopStop(CFRunLoopGetCurrent())
 		}
 	}
