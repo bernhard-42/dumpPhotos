@@ -44,25 +44,54 @@ func JSONStringify(value: AnyObject, prettyPrinted:Bool = false) -> String {
 // Result Classes
 //
 
+var allAttributes = [String: Int]()
 
 class MediaObject {
 	var identifier: String!
 	var name: String!
 	var url: String!
 	var contentType: String!
+	var attributes: [String : AnyObject]
 	
-	init(identifier: String, name: String = "", url: String = "", contentType: String = "") {
+	init(identifier: String, name: String = "", url: String = "", contentType: String = "", attributes: [String : AnyObject]) {
 		self.identifier = identifier
 		self.name = name
 		self.url = url
 		self.contentType = contentType
+		self.attributes = attributes
 	}
 	
 	func dict() -> [String: AnyObject] {
 		var result:[String: AnyObject] = [:]
-		if (name != "") { result["name"] = name as AnyObject }
-		if (url != "") { result["url"] = url as AnyObject }
-		if (contentType != "") { result["contentType"] = contentType as AnyObject }
+		for (key, value) in self.attributes {
+			allAttributes[key] = 0
+			let stringKeys:[String] = ["URL", "contentType", "originalURL", "resolutionString", "modificationDate", "keywordNamesAsString", "name", "Name", "Comment"]
+			let rawKeys:[String] = ["longitude", "latitude", "modelId", "fileSize", "Hidden", "mediaType"]
+			if (key == "ILMediaObjectKeywordsAttribute") {
+				result["keywords"] = value as! [String]
+			} else if (key == "Places") {
+				result["places"] = value as! [String]
+			} else if (key == "FaceList") {
+				var faceNames = [String]()
+				let faces  = value as! [AnyObject]
+				for face in faces {
+					let a = face as! [String: AnyObject]
+					faceNames.append(a["name"] as! String)
+				}
+				result["faces"] = faceNames
+				// result["faces"] = value as! [String]
+			} else if (stringKeys.contains(key) ) {
+				result[key] = "\(value)"
+			} else if (rawKeys.contains(key) ) {
+				result[key] = value
+			} else if (key == "DateAsTimerInterval") {
+				result["interval"] = value
+			}
+		}
+//		if (name != "") { result["name"] = name as AnyObject }
+//		if (url != "") { result["url"] = url as AnyObject }
+//		if (contentType != "") { result["contentType"] = contentType as AnyObject }
+		
 		return result
 	}
 }
@@ -215,8 +244,7 @@ class PhotosDump:NSObject {
 					let name = mediaObject.name ?? ""
 					let contentType = mediaObject.contentType ?? ""
 					let attributes = mediaObject.attributes
-					print(attributes)
-					m = MediaObject(identifier: mediaObject.identifier, name: name, url: url.absoluteString, contentType: contentType)
+					m = MediaObject(identifier: mediaObject.identifier, name: name, url: url.absoluteString, attributes: attributes)
 					group!.addMediaObject(mediaObject.identifier, mediaObject: m)
 				} else {
 					group!.addMediaReference(mediaObject.identifier)
@@ -230,14 +258,14 @@ class PhotosDump:NSObject {
 		if (albumCount == 0) {
 			let result = JSONStringify(groups.dict(), prettyPrinted: true)
 			let fileManager = NSFileManager.defaultManager()
-			let path = fileManager.currentDirectoryPath + "PhotosLibrary.json"
+			let path = fileManager.currentDirectoryPath + "/PhotosLibrary.json"
 			do {
 				try result.writeToFile(path, atomically: true, encoding: NSUTF8StringEncoding)
 				print(path)
 			} catch {
 				print("ERROR writing result")
 			}
-
+			print(allAttributes.keys)
 			CFRunLoopStop(CFRunLoopGetCurrent())
 		}
 	}
