@@ -54,6 +54,8 @@ class MediaObject {
     var mediaType: [UInt: String] = [MLMediaType.Audio.rawValue: "Audio",
                                      MLMediaType.Image.rawValue: "Image",
                                      MLMediaType.Movie.rawValue: "Movie"]
+	
+	let diffEpochToAppleTime = 978307200   // diff between 1.1.1970 (epoch) and 1.1.2001 (apple timer start)
     
     init(identifier: String, attributes: [String : AnyObject]) {
 		self.identifier = identifier
@@ -63,9 +65,10 @@ class MediaObject {
 	func dict() -> [String: AnyObject] {
 		var result:[String: AnyObject] = [:]
 		for (key, value) in self.attributes {
-			let urlKeys = ["URL", "originalURL"]
+			
+			let urlKeys = ["URL", "originalURL", "thumbnailURL"]
 			let stringKeys:[String] = ["contentType", "resolutionString", "keywordNamesAsString", "name"]
-			let rawKeys:[String] = ["longitude", "latitude", "modelId", "fileSize", "Hidden"]
+			let rawKeys:[String] = ["longitude", "latitude", "fileSize" /*, "modelId", "Hidden" */]
             
 			if (key == "ILMediaObjectKeywordsAttribute") {
 				result["keywords"] = value as! [String]
@@ -82,17 +85,16 @@ class MediaObject {
 			} else if (stringKeys.contains(key) ) {
 				result[key] = "\(value)"
 			} else if (urlKeys.contains(key) ) {
-				// let decodedUrl: String = "\(value)"
-				// result[key] = decodedUrl.stringByRemovingPercentEncoding!
-				result[key] = "\(value)"
+				let decodedUrl: String = "\(value)"
+				result[key] = decodedUrl.stringByRemovingPercentEncoding!
 			} else if (rawKeys.contains(key) ) {
 				result[key] = value
             } else if (key == "DateAsTimerInterval") {
                 let seconds:Int = value as! Int
 				result["eventDateAsTimerInterval"] = seconds
-                result["eventDateAsEpochInterval"] = seconds + 978307200   // diff between 1.1.1970 (epoch) and 1.1.2001 (apple start)
+                result["eventDateAsEpochInterval"] = seconds + diffEpochToAppleTime
             } else if (key == "modificationDate") {
-                let mDate:String = "\(value)"
+				let mDate:String = "\(value)"
                 if mDate != "0000-12-30 00:00:00 +0000" {   // never modified
                     result[key] = mDate
                 }
