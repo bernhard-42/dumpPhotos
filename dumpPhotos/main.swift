@@ -50,8 +50,12 @@ class MediaObject {
 	var url: String!
 	var contentType: String!
 	var attributes: [String : AnyObject]
-	
-	init(identifier: String, attributes: [String : AnyObject]) {
+
+    var mediaType: [UInt: String] = [MLMediaType.Audio.rawValue: "Audio",
+                                     MLMediaType.Image.rawValue: "Image",
+                                     MLMediaType.Movie.rawValue: "Movie"]
+    
+    init(identifier: String, attributes: [String : AnyObject]) {
 		self.identifier = identifier
 		self.attributes = attributes
 	}
@@ -60,8 +64,9 @@ class MediaObject {
 		var result:[String: AnyObject] = [:]
 		for (key, value) in self.attributes {
 			let urlKeys = ["URL", "originalURL"]
-			let stringKeys:[String] = ["contentType", "resolutionString", "modificationDate", "keywordNamesAsString", "name", "Name", "Comment"]
-			let rawKeys:[String] = ["longitude", "latitude", "modelId", "fileSize", "Hidden", "mediaType"]
+			let stringKeys:[String] = ["contentType", "resolutionString", "keywordNamesAsString", "name"]
+			let rawKeys:[String] = ["longitude", "latitude", "modelId", "fileSize", "Hidden"]
+            
 			if (key == "ILMediaObjectKeywordsAttribute") {
 				result["keywords"] = value as! [String]
 			} else if (key == "Places") {
@@ -82,12 +87,23 @@ class MediaObject {
 				result[key] = "\(value)"
 			} else if (rawKeys.contains(key) ) {
 				result[key] = value
-			} else if (key == "DateAsTimerInterval") {
-				result["interval"] = value
+            } else if (key == "DateAsTimerInterval") {
+                let seconds:Int = value as! Int
+				result["eventDateAsTimerInterval"] = seconds
+                result["eventDateAsEpochInterval"] = seconds + 978307200   // diff between 1.1.1970 (epoch) and 1.1.2001 (apple start)
+            } else if (key == "modificationDate") {
+                let mDate:String = "\(value)"
+                if mDate != "0000-12-30 00:00:00 +0000" {   // never modified
+                    result[key] = mDate
+                }
+            } else if (key == "mediaType") {
+                result[key] = mediaType[value as! UInt]
+            } else if (key == "Comment") {
+                result["comment"] = "\(value)"
 			}
 		}
-		
-		return result
+
+        return result
 	}
 }
 
@@ -154,25 +170,23 @@ class Group {
 //
 class PhotosDump:NSObject {
 	var library : MLMediaLibrary!
-	var photos : MLMediaSource!
+	var photosSource : MLMediaSource!
 	var rootGroup : MLMediaGroup!
 	var mediaObjects : [String: MLMediaGroup]!
 	
-	var groupList = [String: Group]()
 	var groups = Group(identifier: "root", name: "Root Group", type: "com.apple.Photos.Folder")
-	var albumCount = 0
-	
+    
+    var albumList = [String: Group]()
+	var albumLoadCounter = 0
+    var ignoreAlbum : [String] = ["lastImportAlbum", "photoStreamAlbum", "peopleAlbum"]
+    
 	override init() {
 		super.init()
-		
-		mediaObjects = [String: MLMediaGroup]()
-		let options : [String : AnyObject] = [MLMediaLoadIncludeSourcesKey: [MLMediaSourcePhotosIdentifier]]
-		library = MLMediaLibrary(options: options)
-		library.addObserver(self, forKeyPath: "mediaSources", options: NSKeyValueObservingOptions.New, context: nil)
-		library.mediaSources
+		loadLibrary()
 		CFRunLoopRun();
 	}
 	
+    
 	override func observeValueForKeyPath(keyPath: String?, ofObject object: AnyObject?, change: [String : AnyObject]?, context: UnsafeMutablePointer<Void>) {
 		guard let path = keyPath else { return }
 		
@@ -188,80 +202,100 @@ class PhotosDump:NSObject {
 		}
 	}
 	
+    
+    func loadLibrary() {
+        mediaObjects = [String: MLMediaGroup]()
+        
+        // KVO: async load of media libraries
+        library = MLMediaLibrary(options: [MLMediaLoadIncludeSourcesKey: [MLMediaSourcePhotosIdentifier]])
+        library.addObserver(self, forKeyPath: "mediaSources", options: NSKeyValueObservingOptions.New, context: nil)
+        library.mediaSources
+    }
+    
+    
 	func loadSources(){
 		if let mediaSources = library.mediaSources {
 			for (_, source) in mediaSources {
 				print("Source: \(source.mediaSourceIdentifier)")
-				photos = source
-				photos.addObserver(self, forKeyPath: "rootMediaGroup", options: NSKeyValueObservingOptions.New, context: nil)
-				photos.rootMediaGroup
+                
+                // KVO: async load of root group of retrieved media source
+				photosSource = source
+				photosSource.addObserver(self, forKeyPath: "rootMediaGroup", options: NSKeyValueObservingOptions.New, context: nil)
+				photosSource.rootMediaGroup
 			}
 		}
 	}
 	
+    
+    func loadRootGroup(){
+        if let rootGroup = photosSource.rootMediaGroup {
+            print("Starting folder scan for Root Group: \"\(rootGroup.identifier):\(rootGroup.typeIdentifier)\"")
+            
+            if let albums = photosSource.mediaGroupForIdentifier("TopLevelAlbums") {
+                traverseFolders(albums, groups: groups)
+            }
+        }
+        
+    }
+    
 	func traverseFolders(objects: MLMediaGroup, groups: Group) {
 		for (album) in objects.childGroups! {
-			let g = Group(identifier: album.identifier, name: album.name!, type: album.typeIdentifier)
+
+            // add a new group
+            let g = Group(identifier: album.identifier, name: album.name!, type: album.typeIdentifier)
 			groups.addGroup(g)
-			groupList[album.identifier] = g
-			// print(album.name, album.identifier, album.typeIdentifier)
-			if (album.typeIdentifier == "com.apple.Photos.Folder") {
+
+            if (album.typeIdentifier == "com.apple.Photos.Folder") {
 				traverseFolders(album, groups:g)
 			} else {
-		        //if (album.identifier == "allPhotosAlbum" || album.typeIdentifier == "com.apple.Photos.Album") {
-				// print("-", album.name)
-				let context = album.identifier
-				albumCount += 1
-				mediaObjects[context] = album
-				mediaObjects[context]?.addObserver(self, forKeyPath: "mediaObjects", options: NSKeyValueObservingOptions.New, context: retained(context))
-				mediaObjects[context]?.mediaObjects
+                if !ignoreAlbum.contains(album.identifier) {
+                    let context = album.identifier
+                    albumList[context] = g   // make group acessible via context to insert media objects in function loadMediaObjects
+                    albumLoadCounter += 1
+                    
+                    // KVO: async load of media objects (photos and videos)
+                    mediaObjects[context] = album   // make album acessible via context in function loadMediaObjects
+                    mediaObjects[context]!.addObserver(self, forKeyPath: "mediaObjects", options: NSKeyValueObservingOptions.New, context: retained(context))
+                    mediaObjects[context]!.mediaObjects
+                }
 			}
 		}
-	}
-	
-	func loadRootGroup(){
-		if let rootGroup = photos.rootMediaGroup {
-			print("Root Group: \(rootGroup.identifier):\(rootGroup.typeIdentifier)")
-			print("Starting folder scan")
-			if let albums = photos.mediaGroupForIdentifier("TopLevelAlbums") {
-				traverseFolders(albums, groups: groups)
-			}
-		}
-		
 	}
 	
 	func loadMediaObjects(context: String) {
-		if let mediaObjects = mediaObjects[context]?.mediaObjects {
-			let group = groupList[context]
-			var m: MediaObject!
-			var count = 0
-			for (mediaObject) in mediaObjects {
-				if (context == "allPhotosAlbum") {
-					let attributes = mediaObject.attributes
-					m = MediaObject(identifier: mediaObject.identifier, attributes: attributes)
-					group!.addMediaObject(mediaObject.identifier, mediaObject: m)
-				} else {
-					group!.addMediaReference(mediaObject.identifier)
-				}
-				count += 1
-			}
-			print("- Album \"\(self.mediaObjects[context]!.name!)\": \(count) media objects")
-		}
-		albumCount -= 1
-		if (albumCount == 0) {
-			print("Converting to JSON")
-			let result = JSONStringify(groups.dict(), prettyPrinted: true)
-			print("Writing result")
-			let fileManager = NSFileManager.defaultManager()
-			let path = fileManager.currentDirectoryPath + "/PhotosLibrary.json"
-			do {
-				try result.writeToFile(path, atomically: true, encoding: NSUTF8StringEncoding)
-				print(path)
-			} catch {
-				print("ERROR writing result")
-			}
-			CFRunLoopStop(CFRunLoopGetCurrent())
-		}
+        if let mediaObjs = mediaObjects[context]!.mediaObjects {
+            let album = albumList[context]
+            var m: MediaObject
+            var count = 0
+            for (mediaObject) in mediaObjs {
+                if (context == "allPhotosAlbum") {
+                    let attributes = mediaObject.attributes
+                    m = MediaObject(identifier: mediaObject.identifier, attributes: attributes)
+                    album!.addMediaObject(mediaObject.identifier, mediaObject: m)
+                } else {
+                    album!.addMediaReference(mediaObject.identifier)
+                }
+                count += 1
+            }
+            print("- Album \"\(self.mediaObjects[context]!.name)\": \(count) media objects")
+            albumLoadCounter -= 1
+            
+            // if all groups are loaded asynronously, convert constructed groups class to JSON
+            if (albumLoadCounter == 0) {
+                print("Converting to JSON")
+                let result = JSONStringify(groups.dict(), prettyPrinted: true)
+                print("Writing result")
+                let fileManager = NSFileManager.defaultManager()
+                let path = fileManager.currentDirectoryPath + "/PhotosLibrary.json"
+                do {
+                    try result.writeToFile(path, atomically: true, encoding: NSUTF8StringEncoding)
+                    print(path)
+                } catch {
+                    print("ERROR writing result")
+                }
+                CFRunLoopStop(CFRunLoopGetCurrent())
+            }
+        }
 	}
 }
 
