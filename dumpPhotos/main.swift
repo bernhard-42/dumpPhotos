@@ -185,12 +185,17 @@ class PhotosDump:NSObject {
 	var rootGroup : MLMediaGroup!
 	var mediaObjects : [String: MLMediaGroup]!
 	
-	var groups = Group(identifier: "root", name: "Root Group", type: "com.apple.Photos.Folder")
+	var groups = Group(identifier: "root", name: "Root Group", type: MLPhotosFolderTypeIdentifier)
     
     var albumList = [String: Group]()
 	var albumLoadCounter = 0
-    var ignoreAlbum : [String] = ["lastImportAlbum", "photoStreamAlbum", "peopleAlbum"]
-    
+	
+	// Cocoa constants not found in MediaLibrary
+	let topLevelAlbumsIdentifier = "TopLevelAlbums"
+	let allPhotosAlbumIdentifier = "allPhotosAlbum"
+	let ignoreAlbumIdentifiers : [String] = ["lastImportAlbum", "photoStreamAlbum", "peopleAlbum"]
+	
+	
 	override init() {
 		super.init()
 		loadLibrary()
@@ -242,11 +247,10 @@ class PhotosDump:NSObject {
         if let rootGroup = photosSource.rootMediaGroup {
             print("Starting folder scan for Root Group: \"\(rootGroup.identifier):\(rootGroup.typeIdentifier)\"")
             
-            if let albums = photosSource.mediaGroupForIdentifier("TopLevelAlbums") {
+            if let albums = photosSource.mediaGroupForIdentifier(topLevelAlbumsIdentifier) {
                 traverseFolders(albums, groups: groups)
             }
         }
-        
     }
     
 	func traverseFolders(objects: MLMediaGroup, groups: Group) {
@@ -254,12 +258,13 @@ class PhotosDump:NSObject {
 
             // add a new group
             let g = Group(identifier: album.identifier, name: album.name!, type: album.typeIdentifier)
-			groups.addGroup(g)
 
-            if (album.typeIdentifier == "com.apple.Photos.Folder") {
+            if (album.typeIdentifier == MLPhotosFolderTypeIdentifier) {
+				groups.addGroup(g)
 				traverseFolders(album, groups:g)
 			} else {
-                if !ignoreAlbum.contains(album.identifier) {
+                if !ignoreAlbumIdentifiers.contains(album.identifier) {
+					groups.addGroup(g)
                     let context = album.identifier
                     albumList[context] = g   // make group acessible via context to insert media objects in function loadMediaObjects
                     albumLoadCounter += 1
@@ -279,13 +284,12 @@ class PhotosDump:NSObject {
             var m: MediaObject
             var count = 0
             for (mediaObject) in mediaObjs {
-                if (context == "allPhotosAlbum") {
+                if (context == allPhotosAlbumIdentifier) {
                     let attributes = mediaObject.attributes
                     m = MediaObject(identifier: mediaObject.identifier, attributes: attributes)
-                    album!.addMediaObject(mediaObject.identifier, mediaObject: m)
-                } else {
-                    album!.addMediaReference(mediaObject.identifier)
-                }
+					groups.addMediaObject(mediaObject.identifier, mediaObject: m)
+				}
+				album!.addMediaReference(mediaObject.identifier)
                 count += 1
             }
             print("- Album \"\(self.mediaObjects[context]!.name)\": \(count) media objects")
