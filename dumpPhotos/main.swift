@@ -245,7 +245,7 @@ class PhotosDump:NSObject {
     
     func loadRootGroup(){
         if let rootGroup = photosSource.rootMediaGroup {
-            print("Starting folder scan for Root Group: \"\(rootGroup.identifier):\(rootGroup.typeIdentifier)\"")
+            print("Scanning folder for Root Group: \"\(rootGroup.identifier):\(rootGroup.typeIdentifier)\"")
             
             if let albums = photosSource.mediaGroupForIdentifier(topLevelAlbumsIdentifier) {
                 traverseFolders(albums, groups: groups)
@@ -292,7 +292,7 @@ class PhotosDump:NSObject {
 				album!.addMediaReference(mediaObject.identifier)
                 count += 1
             }
-            print("- Album \"\(self.mediaObjects[context]!.name)\": \(count) media objects")
+            print("- Album \"\(self.mediaObjects[context]!.name!)\": \(count) media objects")
             albumLoadCounter -= 1
             
             // if all groups are loaded asynronously, convert constructed groups class to JSON
