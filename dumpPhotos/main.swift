@@ -65,16 +65,15 @@ class MediaObject {
 	func dict() -> [String: AnyObject] {
 		var result:[String: AnyObject] = [:]
 		for (key, value) in self.attributes {
-			
-			let urlKeys = ["URL", "originalURL", "thumbnailURL"]
-			let stringKeys:[String] = ["contentType", "resolutionString", "keywordNamesAsString", "name"]
-			let rawKeys:[String] = ["longitude", "latitude", "fileSize" /*, "modelId", "Hidden" */]
-            
-			if (key == "ILMediaObjectKeywordsAttribute") {
+
+			switch (key) {
+			case "ILMediaObjectKeywordsAttribute":
 				result["keywords"] = value as! [String]
-			} else if (key == "Places") {
+			
+			case "Places":
 				result["places"] = value as! [String]
-			} else if (key == "FaceList") {
+
+			case "FaceList":
 				var faceNames = [String]()
 				let faces  = value as! [AnyObject]
 				for face in faces {
@@ -82,26 +81,36 @@ class MediaObject {
 					faceNames.append(a["name"] as! String)
 				}
 				result["faces"] = faceNames
-			} else if (stringKeys.contains(key) ) {
+			
+			case "contentType", "resolutionString", "keywordNamesAsString", "name":
 				result[key] = "\(value)"
-			} else if (urlKeys.contains(key) ) {
+			
+			case "URL", "originalURL", "thumbnailURL":
 				let decodedUrl: String = "\(value)"
 				result[key] = decodedUrl.stringByRemovingPercentEncoding!
-			} else if (rawKeys.contains(key) ) {
+			
+			case "longitude", "latitude", "fileSize" /*, "modelId", "Hidden" */:
 				result[key] = value
-            } else if (key == "DateAsTimerInterval") {
-                let seconds:Int = value as! Int
+			
+			case "DateAsTimerInterval":
+				let seconds:Int = value as! Int
 				result["eventDateAsTimerInterval"] = seconds
-                result["eventDateAsEpochInterval"] = seconds + diffEpochToAppleTime
-            } else if (key == "modificationDate") {
+				result["eventDateAsEpochInterval"] = seconds + diffEpochToAppleTime
+			
+			case "modificationDate":
 				let mDate:String = "\(value)"
-                if mDate != "0000-12-30 00:00:00 +0000" {   // never modified
-                    result[key] = mDate
-                }
-            } else if (key == "mediaType") {
-                result[key] = mediaType[value as! UInt]
-            } else if (key == "Comment") {
-                result["comment"] = "\(value)"
+				if mDate != "0000-12-30 00:00:00 +0000" {   // never modified
+					result[key] = mDate
+				}
+			
+			case "mediaType":
+				result[key] = mediaType[value as! UInt]
+			
+			case "Comment":
+				result["comment"] = "\(value)"
+			
+			default:
+				()
 			}
 		}
 
