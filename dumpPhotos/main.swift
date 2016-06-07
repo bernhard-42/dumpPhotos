@@ -149,9 +149,10 @@ class Group {
 	var identifier: String!
 	var name: String!
 	var type: String!
-	var groups: [Group]!
-	var mediaObjects: [String: MediaObject]!
-	var mediaReferences: [String]!
+	
+	var groups = [Group]()
+	var mediaObjects = [String: MediaObject]()
+	var mediaReferences = [String]()
 	
 	init(identifier: String, name: String, type: String) {
 		self.identifier = identifier
@@ -160,43 +161,36 @@ class Group {
 	}
 	
 	func addGroup(group: Group) {
-		if ( self.groups == nil) {
-			self.groups = []
-		}
 		self.groups.append(group)
 	}
 	
 	func addMediaObject(ident: String, mediaObject: MediaObject) {
-		if (self.mediaObjects == nil) {
-			self.mediaObjects = [ : ]
-		}
 		self.mediaObjects[ident] = mediaObject
 	}
 	
 	func addMediaReference(ident: String) {
-		if (self.mediaReferences == nil) {
-			self.mediaReferences = []
-		}
 		self.mediaReferences.append(ident)
 	}
 
 	func dict() -> [String: AnyObject] {
 		var result : [String: AnyObject] = ["identifier": identifier as AnyObject, "name": name as AnyObject, "type": type as AnyObject]
-		if (groups != nil) {
+		if (groups.count > 0) {
 			var g = [AnyObject]()
 			for (group) in groups {
 				g.append(group.dict() as AnyObject)
 			}
 			result["groups"] = g as AnyObject
 		}
-		if (mediaObjects != nil) {
+		
+		if (mediaObjects.count > 0) {
 			var m = [String: AnyObject]()
 			for (ident, mediaObject) in mediaObjects {
 				m[ident] = mediaObject.dict() as AnyObject
 			}
 			result["mediaObjects"] = m as AnyObject
 		}
-		if (mediaReferences != nil) {
+		
+		if (mediaReferences.count > 0) {
 			result["mediaReferences"] = mediaReferences as AnyObject
 		}
 		return result
@@ -211,10 +205,10 @@ class PhotosDump:NSObject {
 	var library : MLMediaLibrary!
 	var photosSource : MLMediaSource!
 	var rootGroup : MLMediaGroup!
-	var mediaObjects : [String: MLMediaGroup]!
 	
 	var groups = Group(identifier: "root", name: "Root Group", type: MLPhotosFolderTypeIdentifier)
-    
+	var mediaObjects  = [String: MLMediaGroup]()
+	
     var albumList = [String: Group]()
 	var albumLoadCounter = 0
 	
@@ -248,8 +242,6 @@ class PhotosDump:NSObject {
 	
     
     func loadLibrary() {
-        mediaObjects = [String: MLMediaGroup]()
-        
         // KVO: async load of media libraries
         library = MLMediaLibrary(options: [MLMediaLoadIncludeSourcesKey: [MLMediaSourcePhotosIdentifier]])
         library.addObserver(self, forKeyPath: "mediaSources", options: NSKeyValueObservingOptions.New, context: nil)
