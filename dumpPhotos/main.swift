@@ -21,6 +21,24 @@ func released(ptr: UnsafeMutablePointer<Void>) -> String {
 	return Unmanaged<NSString>.fromOpaque(COpaquePointer(ptr)).takeRetainedValue() as String
 }
 
+
+//
+// Helpers to force single byte unicode utf-8 characters
+//
+
+func precomp(obj: AnyObject) -> String {
+	return (obj as! String).precomposedStringWithCanonicalMapping
+}
+
+func precompArray(arr: [AnyObject]) -> [String] {
+	var result = [String]()
+	for o in arr {
+		result.append(precomp(o))
+	}
+	return result
+}
+
+
 //
 // JSON Helper
 //
@@ -41,6 +59,15 @@ func JSONStringify(value: AnyObject, prettyPrinted:Bool = false) -> String {
 
 
 //
+// diff between 1.1.1970 (epoch) and 1.1.2001 (apple timer reference)
+//
+// let now = NSDate()
+// let diffEpochToAppleTime = Int(now.timeIntervalSince1970 - now.timeIntervalSinceReferenceDate)
+//
+let diffEpochToAppleTime = 978307200
+
+
+//
 // Result Classes
 //
 
@@ -55,8 +82,7 @@ class MediaObject {
                                      MLMediaType.Image.rawValue: "Image",
                                      MLMediaType.Movie.rawValue: "Movie"]
 	
-	let diffEpochToAppleTime = 978307200   // diff between 1.1.1970 (epoch) and 1.1.2001 (apple timer start)
-    
+	
     init(identifier: String, attributes: [String : AnyObject]) {
 		self.identifier = identifier
 		self.attributes = attributes
@@ -68,46 +94,47 @@ class MediaObject {
 
 			switch (key) {
 			case "ILMediaObjectKeywordsAttribute":
-				result["keywords"] = value as! [String]
+				let keywords = value as! [AnyObject]
+				result["keywords"] = precompArray(keywords)
 			
 			case "Places":
-				result["places"] = value as! [String]
+				let places = value as! [AnyObject]
+				result["places"] = precompArray(places)
 
 			case "FaceList":
 				var faceNames = [String]()
 				let faces  = value as! [AnyObject]
 				for face in faces {
 					let a = face as! [String: AnyObject]
-					faceNames.append(a["name"] as! String)
+					faceNames.append(precomp(a["name"]!))
 				}
 				result["faces"] = faceNames
 			
 			case "contentType", "resolutionString", "keywordNamesAsString", "name":
-				result[key] = "\(value)"
+				result[key] = precomp(value)
 			
 			case "URL", "originalURL", "thumbnailURL":
-				let decodedUrl: String = "\(value)"
-				result[key] = decodedUrl.stringByRemovingPercentEncoding!
+				let url = value as! NSURL
+				result[key] = precomp(url.absoluteString.stringByRemovingPercentEncoding!)
 			
 			case "longitude", "latitude", "fileSize" /*, "modelId", "Hidden" */:
 				result[key] = value
 			
 			case "DateAsTimerInterval":
 				let seconds:Int = value as! Int
-				result["eventDateAsTimerInterval"] = seconds
-				result["eventDateAsEpochInterval"] = seconds + diffEpochToAppleTime
+				result["eventDate"] = seconds + diffEpochToAppleTime
 			
 			case "modificationDate":
-				let mDate:String = "\(value)"
-				if mDate != "0000-12-30 00:00:00 +0000" {   // never modified
-					result[key] = mDate
+				let mDate:NSDate = value as! NSDate
+				if mDate.isGreaterThan(NSDate.distantPast()) {
+					result["modificationDate"] = Int(mDate.timeIntervalSince1970)
 				}
 			
 			case "mediaType":
 				result[key] = mediaType[value as! UInt]
 			
 			case "Comment":
-				result["comment"] = "\(value)"
+				result["comment"] = precomp(value)
 			
 			default:
 				()
@@ -175,6 +202,7 @@ class Group {
 		return result
 	}
 }
+
 
 //
 // The main class
@@ -255,25 +283,24 @@ class PhotosDump:NSObject {
     
 	func traverseFolders(objects: MLMediaGroup, groups: Group) {
 		for (album) in objects.childGroups! {
+			if !ignoreAlbumIdentifiers.contains(album.identifier) {
 
-            // add a new group
-            let g = Group(identifier: album.identifier, name: album.name!, type: album.typeIdentifier)
-
-            if (album.typeIdentifier == MLPhotosFolderTypeIdentifier) {
+				// add a new group
+				let g = Group(identifier: album.identifier, name: album.name!, type: album.typeIdentifier)
 				groups.addGroup(g)
-				traverseFolders(album, groups:g)
-			} else {
-                if !ignoreAlbumIdentifiers.contains(album.identifier) {
-					groups.addGroup(g)
-                    let context = album.identifier
-                    albumList[context] = g   // make group acessible via context to insert media objects in function loadMediaObjects
-                    albumLoadCounter += 1
-                    
-                    // KVO: async load of media objects (photos and videos)
-                    mediaObjects[context] = album   // make album acessible via context in function loadMediaObjects
-                    mediaObjects[context]!.addObserver(self, forKeyPath: "mediaObjects", options: NSKeyValueObservingOptions.New, context: retained(context))
-                    mediaObjects[context]!.mediaObjects
-                }
+
+				if (album.typeIdentifier == MLPhotosFolderTypeIdentifier) {
+					traverseFolders(album, groups:g)
+				} else {
+					let context = album.identifier
+					albumList[context] = g   // make group acessible via context to insert media objects in function loadMediaObjects
+					albumLoadCounter += 1
+					
+					// KVO: async load of media objects (photos and videos)
+					mediaObjects[context] = album   // make album acessible via context in function loadMediaObjects
+					mediaObjects[context]!.addObserver(self, forKeyPath: "mediaObjects", options: NSKeyValueObservingOptions.New, context: retained(context))
+					mediaObjects[context]!.mediaObjects
+				}
 			}
 		}
 	}
