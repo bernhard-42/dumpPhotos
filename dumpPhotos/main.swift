@@ -2,7 +2,9 @@
 //  main.swift
 //  dumpPhotos
 //
-//  Created by Bernhard Walter on 03.06.16.
+//  Created by Bernhard Walter on 03.06.2016
+//  Ported to Swift 3 on 25.09.2016
+//
 //  Copyright © 2016 Bernhard Walter. All rights reserved.
 //
 
@@ -26,14 +28,14 @@ func released(_ ptr: UnsafeMutableRawPointer) -> String {
 // Helpers to force single byte unicode utf-8 characters
 //
 
-func precomp(_ obj: AnyObject) -> String {
-	return (obj as! String).precomposedStringWithCanonicalMapping
+func precomp(_ str: String) -> String {
+	return str.precomposedStringWithCanonicalMapping
 }
 
-func precompArray(_ arr: [AnyObject]) -> [String] {
+func precompArray(_ arr: [String]) -> [String] {
 	var result = [String]()
-	for o in arr {
-		result.append(precomp(o))
+	for str in arr {
+		result.append(str)
 	}
 	return result
 }
@@ -42,18 +44,20 @@ func precompArray(_ arr: [AnyObject]) -> [String] {
 //
 // JSON Helper
 //
-func JSONStringify(_ value: AnyObject, prettyPrinted:Bool = false) -> String {
+func JSONStringify(_ value: Any, prettyPrinted:Bool = false) -> String {
 	let options = prettyPrinted ? JSONSerialization.WritingOptions.prettyPrinted : JSONSerialization.WritingOptions(rawValue: 0)
 	if JSONSerialization.isValidJSONObject(value) {
 		do {
 			let data = try JSONSerialization.data(withJSONObject: value, options: options)
-			if let string = NSString(data: data, encoding: String.Encoding.utf8.rawValue) {
-				return string as String
+			if let str = NSString(data: data, encoding: String.Encoding.utf8.rawValue) {
+				return str as String
 			}
 		} catch {
-			print("error")
+			print("error: conversion failed")
+            return ""
 		}
 	}
+    print("error: invalid dict")
 	return ""
 }
 
@@ -76,65 +80,64 @@ class MediaObject {
 	var name: String!
 	var url: String!
 	var contentType: String!
-	var attributes: [String : AnyObject]
+	var attributes: [String : Any]
 
     var mediaType: [UInt: String] = [MLMediaType.audio.rawValue: "Audio",
                                      MLMediaType.image.rawValue: "Image",
                                      MLMediaType.movie.rawValue: "Movie"]
 	
 	
-    init(identifier: String, attributes: [String : AnyObject]) {
+    init(identifier: String, attributes: [String: Any]) {
 		self.identifier = identifier
 		self.attributes = attributes
 	}
 	
-	func dict() -> [String: AnyObject] {
-		var result:[String: AnyObject] = [:]
+	func dict() -> [String: Any] {
+		var result = [String: Any]()
 		for (key, value) in self.attributes {
 
 			switch (key) {
 			case "ILMediaObjectKeywordsAttribute":
-				let keywords = value as! [AnyObject]
-				result["keywords"] = precompArray(keywords) as AnyObject?
+				let keywords = value as! [String]
+				result["keywords"] = precompArray(keywords)
 			
 			case "Places":
-				let places = value as! [AnyObject]
-				result["places"] = precompArray(places) as AnyObject?
+				let places = value as! [String]
+				result["places"] = precompArray(places)
 
 			case "FaceList":
 				var faceNames = [String]()
 				let faces  = value as! [AnyObject]
-				for face in faces {
-					let a = face as! [String: AnyObject]
-					faceNames.append(precomp(a["name"]!))
+                for face in faces {
+					faceNames.append(precomp(face["name"] as! String))
 				}
-				result["faces"] = faceNames as AnyObject?
+				result["faces"] = faceNames
 			
 			case "contentType", "resolutionString", "keywordNamesAsString", "name":
-				result[key] = precomp(value) as AnyObject?
+				result[key] = precomp(value as! String)
 			
 			case "URL", "originalURL", "thumbnailURL":
 				let url = value as! URL
-				result[key] = precomp(url.absoluteString.removingPercentEncoding as AnyObject) as AnyObject?
+				result[key] = precomp(url.absoluteString.removingPercentEncoding!)
 			
 			case "longitude", "latitude", "fileSize" /*, "modelId", "Hidden" */:
 				result[key] = value
 			
 			case "DateAsTimerInterval":
 				let seconds:Int = value as! Int
-				result["eventDate"] = (seconds + diffEpochToAppleTime) as AnyObject?
+				result["eventDate"] = seconds + diffEpochToAppleTime
 			
 			case "modificationDate":
 				let mDate:Date = value as! Date
-				if (mDate as NSDate).isGreaterThan(Date.distantPast) {
-					result["modificationDate"] = Int(mDate.timeIntervalSince1970) as AnyObject?
+                if (mDate > Date.distantPast) {
+					result["modificationDate"] = Int(mDate.timeIntervalSince1970)
 				}
 			
 			case "mediaType":
-				result[key] = mediaType[value as! UInt] as AnyObject?
+				result[key] = mediaType[value as! UInt]
 			
 			case "Comment":
-				result["comment"] = precomp(value) as AnyObject?
+				result["comment"] = precomp(value as! String)
 			
 			default:
 				()
@@ -172,26 +175,26 @@ class Group {
 		self.mediaReferences.append(ident)
 	}
 
-	func dict() -> [String: AnyObject] {
-		var result : [String: AnyObject] = ["identifier": identifier as AnyObject, "name": name as AnyObject, "type": type as AnyObject]
+	func dict() -> [String: Any] {
+		var result : [String: Any] = ["identifier": identifier, "name": name, "type": type]
 		if (groups.count > 0) {
-			var g = [AnyObject]()
+			var g = [Any]()
 			for (group) in groups {
-				g.append(group.dict() as AnyObject)
+				g.append(group.dict() as Any)
 			}
-			result["groups"] = g as AnyObject
+			result["groups"] = g
 		}
 		
 		if (mediaObjects.count > 0) {
-			var m = [String: AnyObject]()
+			var m = [String: Any]()
 			for (ident, mediaObject) in mediaObjects {
-				m[ident] = mediaObject.dict() as AnyObject
+				m[ident] = mediaObject.dict() as Any
 			}
-			result["mediaObjects"] = m as AnyObject
+			result["mediaObjects"] = m as Any
 		}
 		
 		if (mediaReferences.count > 0) {
-			result["mediaReferences"] = mediaReferences as AnyObject
+			result["mediaReferences"] = mediaReferences as Any
 		}
 		return result
 	}
@@ -305,7 +308,7 @@ class PhotosDump:NSObject {
             for (mediaObject) in mediaObjs {
                 if (context == allPhotosAlbumIdentifier) {
                     let attributes = mediaObject.attributes
-                    m = MediaObject(identifier: mediaObject.identifier, attributes: attributes as [String : AnyObject])
+                    m = MediaObject(identifier: mediaObject.identifier, attributes: attributes as [String : Any])
 					groups.addMediaObject(mediaObject.identifier, mediaObject: m)
 				}
 				album!.addMediaReference(mediaObject.identifier)
@@ -317,7 +320,7 @@ class PhotosDump:NSObject {
             // if all groups are loaded asynronously, convert constructed groups class to JSON
             if (albumLoadCounter == 0) {
                 print("Converting to JSON")
-                let result = JSONStringify(groups.dict() as AnyObject, prettyPrinted: true)
+                let result = JSONStringify(groups.dict(), prettyPrinted: true)
                 print("Writing result")
                 let fileManager = FileManager.default
                 let path = fileManager.currentDirectoryPath + "/PhotosLibrary.json"
