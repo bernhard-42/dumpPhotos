@@ -13,12 +13,12 @@ import MediaLibrary
 // 
 // Helpers for KVO to keep context retained in async calls
 //
-func retained(str: String) -> UnsafeMutablePointer<Void> {
-	return UnsafeMutablePointer<Void>(Unmanaged<NSString>.passRetained(str as NSString).toOpaque())
+func retained(_ str: String) -> UnsafeMutableRawPointer {
+	return UnsafeMutableRawPointer(Unmanaged<NSString>.passRetained(str as NSString).toOpaque())
 }
 
-func released(ptr: UnsafeMutablePointer<Void>) -> String {
-	return Unmanaged<NSString>.fromOpaque(COpaquePointer(ptr)).takeRetainedValue() as String
+func released(_ ptr: UnsafeMutableRawPointer) -> String {
+    return Unmanaged<NSString>.fromOpaque(UnsafeRawPointer(ptr)).takeRetainedValue() as String
 }
 
 
@@ -26,11 +26,11 @@ func released(ptr: UnsafeMutablePointer<Void>) -> String {
 // Helpers to force single byte unicode utf-8 characters
 //
 
-func precomp(obj: AnyObject) -> String {
+func precomp(_ obj: AnyObject) -> String {
 	return (obj as! String).precomposedStringWithCanonicalMapping
 }
 
-func precompArray(arr: [AnyObject]) -> [String] {
+func precompArray(_ arr: [AnyObject]) -> [String] {
 	var result = [String]()
 	for o in arr {
 		result.append(precomp(o))
@@ -42,12 +42,12 @@ func precompArray(arr: [AnyObject]) -> [String] {
 //
 // JSON Helper
 //
-func JSONStringify(value: AnyObject, prettyPrinted:Bool = false) -> String {
-	let options = prettyPrinted ? NSJSONWritingOptions.PrettyPrinted : NSJSONWritingOptions(rawValue: 0)
-	if NSJSONSerialization.isValidJSONObject(value) {
+func JSONStringify(_ value: AnyObject, prettyPrinted:Bool = false) -> String {
+	let options = prettyPrinted ? JSONSerialization.WritingOptions.prettyPrinted : JSONSerialization.WritingOptions(rawValue: 0)
+	if JSONSerialization.isValidJSONObject(value) {
 		do {
-			let data = try NSJSONSerialization.dataWithJSONObject(value, options: options)
-			if let string = NSString(data: data, encoding: NSUTF8StringEncoding) {
+			let data = try JSONSerialization.data(withJSONObject: value, options: options)
+			if let string = NSString(data: data, encoding: String.Encoding.utf8.rawValue) {
 				return string as String
 			}
 		} catch {
@@ -78,9 +78,9 @@ class MediaObject {
 	var contentType: String!
 	var attributes: [String : AnyObject]
 
-    var mediaType: [UInt: String] = [MLMediaType.Audio.rawValue: "Audio",
-                                     MLMediaType.Image.rawValue: "Image",
-                                     MLMediaType.Movie.rawValue: "Movie"]
+    var mediaType: [UInt: String] = [MLMediaType.audio.rawValue: "Audio",
+                                     MLMediaType.image.rawValue: "Image",
+                                     MLMediaType.movie.rawValue: "Movie"]
 	
 	
     init(identifier: String, attributes: [String : AnyObject]) {
@@ -95,11 +95,11 @@ class MediaObject {
 			switch (key) {
 			case "ILMediaObjectKeywordsAttribute":
 				let keywords = value as! [AnyObject]
-				result["keywords"] = precompArray(keywords)
+				result["keywords"] = precompArray(keywords) as AnyObject?
 			
 			case "Places":
 				let places = value as! [AnyObject]
-				result["places"] = precompArray(places)
+				result["places"] = precompArray(places) as AnyObject?
 
 			case "FaceList":
 				var faceNames = [String]()
@@ -108,33 +108,33 @@ class MediaObject {
 					let a = face as! [String: AnyObject]
 					faceNames.append(precomp(a["name"]!))
 				}
-				result["faces"] = faceNames
+				result["faces"] = faceNames as AnyObject?
 			
 			case "contentType", "resolutionString", "keywordNamesAsString", "name":
-				result[key] = precomp(value)
+				result[key] = precomp(value) as AnyObject?
 			
 			case "URL", "originalURL", "thumbnailURL":
-				let url = value as! NSURL
-				result[key] = precomp(url.absoluteString.stringByRemovingPercentEncoding!)
+				let url = value as! URL
+				result[key] = precomp(url.absoluteString.removingPercentEncoding as AnyObject) as AnyObject?
 			
 			case "longitude", "latitude", "fileSize" /*, "modelId", "Hidden" */:
 				result[key] = value
 			
 			case "DateAsTimerInterval":
 				let seconds:Int = value as! Int
-				result["eventDate"] = seconds + diffEpochToAppleTime
+				result["eventDate"] = (seconds + diffEpochToAppleTime) as AnyObject?
 			
 			case "modificationDate":
-				let mDate:NSDate = value as! NSDate
-				if mDate.isGreaterThan(NSDate.distantPast()) {
-					result["modificationDate"] = Int(mDate.timeIntervalSince1970)
+				let mDate:Date = value as! Date
+				if (mDate as NSDate).isGreaterThan(Date.distantPast) {
+					result["modificationDate"] = Int(mDate.timeIntervalSince1970) as AnyObject?
 				}
 			
 			case "mediaType":
-				result[key] = mediaType[value as! UInt]
+				result[key] = mediaType[value as! UInt] as AnyObject?
 			
 			case "Comment":
-				result["comment"] = precomp(value)
+				result["comment"] = precomp(value) as AnyObject?
 			
 			default:
 				()
@@ -160,15 +160,15 @@ class Group {
 		self.type = type
 	}
 	
-	func addGroup(group: Group) {
+	func addGroup(_ group: Group) {
 		self.groups.append(group)
 	}
 	
-	func addMediaObject(ident: String, mediaObject: MediaObject) {
+	func addMediaObject(_ ident: String, mediaObject: MediaObject) {
 		self.mediaObjects[ident] = mediaObject
 	}
 	
-	func addMediaReference(ident: String) {
+	func addMediaReference(_ ident: String) {
 		self.mediaReferences.append(ident)
 	}
 
@@ -225,7 +225,7 @@ class PhotosDump:NSObject {
 	}
 	
     
-	override func observeValueForKeyPath(keyPath: String?, ofObject object: AnyObject?, change: [String : AnyObject]?, context: UnsafeMutablePointer<Void>) {
+	override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
 		guard let path = keyPath else { return }
 		
 		switch path {
@@ -234,7 +234,7 @@ class PhotosDump:NSObject {
 		case "rootMediaGroup":
 			loadRootGroup()
 		case "mediaObjects":
-			loadMediaObjects(released(context))
+			loadMediaObjects(released(context!))
 		default:
 			print("Nothing to do for \(path)")
 		}
@@ -244,8 +244,8 @@ class PhotosDump:NSObject {
     func loadLibrary() {
         // KVO: async load of media libraries
         library = MLMediaLibrary(options: [MLMediaLoadIncludeSourcesKey: [MLMediaSourcePhotosIdentifier]])
-        library.addObserver(self, forKeyPath: "mediaSources", options: NSKeyValueObservingOptions.New, context: nil)
-        library.mediaSources
+        library.addObserver(self, forKeyPath: "mediaSources", options: NSKeyValueObservingOptions.new, context: nil)
+        _ = library.mediaSources
     }
     
     
@@ -256,8 +256,8 @@ class PhotosDump:NSObject {
                 
                 // KVO: async load of root group of retrieved media source
 				photosSource = source
-				photosSource.addObserver(self, forKeyPath: "rootMediaGroup", options: NSKeyValueObservingOptions.New, context: nil)
-				photosSource.rootMediaGroup
+				photosSource.addObserver(self, forKeyPath: "rootMediaGroup", options: NSKeyValueObservingOptions.new, context: nil)
+				_ = photosSource.rootMediaGroup
 			}
 		}
 	}
@@ -267,13 +267,13 @@ class PhotosDump:NSObject {
         if let rootGroup = photosSource.rootMediaGroup {
             print("Scanning folder for Root Group: \"\(rootGroup.identifier):\(rootGroup.typeIdentifier)\"")
             
-            if let albums = photosSource.mediaGroupForIdentifier(topLevelAlbumsIdentifier) {
+            if let albums = photosSource.mediaGroup(forIdentifier: topLevelAlbumsIdentifier) {
                 traverseFolders(albums, groups: groups)
             }
         }
     }
     
-	func traverseFolders(objects: MLMediaGroup, groups: Group) {
+	func traverseFolders(_ objects: MLMediaGroup, groups: Group) {
 		for (album) in objects.childGroups! {
 			if !ignoreAlbumIdentifiers.contains(album.identifier) {
 
@@ -290,14 +290,14 @@ class PhotosDump:NSObject {
 					
 					// KVO: async load of media objects (photos and videos)
 					mediaObjects[context] = album   // make album acessible via context in function loadMediaObjects
-					mediaObjects[context]!.addObserver(self, forKeyPath: "mediaObjects", options: NSKeyValueObservingOptions.New, context: retained(context))
-					mediaObjects[context]!.mediaObjects
+					mediaObjects[context]!.addObserver(self, forKeyPath: "mediaObjects", options: NSKeyValueObservingOptions.new, context: retained(context))
+					_ = mediaObjects[context]!.mediaObjects
 				}
 			}
 		}
 	}
 	
-	func loadMediaObjects(context: String) {
+	func loadMediaObjects(_ context: String) {
         if let mediaObjs = mediaObjects[context]!.mediaObjects {
             let album = albumList[context]
             var m: MediaObject
@@ -305,7 +305,7 @@ class PhotosDump:NSObject {
             for (mediaObject) in mediaObjs {
                 if (context == allPhotosAlbumIdentifier) {
                     let attributes = mediaObject.attributes
-                    m = MediaObject(identifier: mediaObject.identifier, attributes: attributes)
+                    m = MediaObject(identifier: mediaObject.identifier, attributes: attributes as [String : AnyObject])
 					groups.addMediaObject(mediaObject.identifier, mediaObject: m)
 				}
 				album!.addMediaReference(mediaObject.identifier)
@@ -317,12 +317,12 @@ class PhotosDump:NSObject {
             // if all groups are loaded asynronously, convert constructed groups class to JSON
             if (albumLoadCounter == 0) {
                 print("Converting to JSON")
-                let result = JSONStringify(groups.dict(), prettyPrinted: true)
+                let result = JSONStringify(groups.dict() as AnyObject, prettyPrinted: true)
                 print("Writing result")
-                let fileManager = NSFileManager.defaultManager()
+                let fileManager = FileManager.default
                 let path = fileManager.currentDirectoryPath + "/PhotosLibrary.json"
                 do {
-                    try result.writeToFile(path, atomically: true, encoding: NSUTF8StringEncoding)
+                    try result.write(toFile: path, atomically: true, encoding: String.Encoding.utf8)
                     print(path)
                 } catch {
                     print("ERROR writing result")
